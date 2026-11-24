@@ -3,10 +3,49 @@ import { isCloudQueueEnabled, supabase } from './supabaseClient.js'
 
 const POLL_INTERVAL_MS = 3000
 const CANCEL_KEY_PREFIX = 'salon-queue-cancel:'
+const memoryCancelKeys = new Map()
 let localSpots = createDemoQueue()
 let localNextTokenNumber = nextTokenNumber(localSpots)
 let localBarberStates = Object.fromEntries(BARBERS.map(({ name, state }) => [name, state]))
 const localSubscribers = new Set()
+
+function createLocalSpotId() {
+  try {
+    const id = globalThis.crypto?.randomUUID?.()
+    if (id) return id
+  } catch {
+    // Some browsers expose crypto but reject access to randomUUID.
+  }
+  return `spot-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function storeCancelKey(spotId, cancelKey) {
+  memoryCancelKeys.set(spotId, cancelKey)
+  try {
+    globalThis.localStorage?.setItem(`${CANCEL_KEY_PREFIX}${spotId}`, cancelKey)
+  } catch {
+    // The in-memory copy keeps this browser session usable when storage is blocked.
+  }
+}
+
+function readCancelKey(spotId) {
+  try {
+    const stored = globalThis.localStorage?.getItem(`${CANCEL_KEY_PREFIX}${spotId}`)
+    if (stored) return stored
+  } catch {
+    // Fall back to the copy kept for this session.
+  }
+  return memoryCancelKeys.get(spotId) ?? null
+}
+
+function removeCancelKey(spotId) {
+  memoryCancelKeys.delete(spotId)
+  try {
+    globalThis.localStorage?.removeItem(`${CANCEL_KEY_PREFIX}${spotId}`)
+  } catch {
+    // Nothing else to clean up when storage is unavailable.
+  }
+}
 
 export { isCloudQueueEnabled }
 
@@ -132,7 +171,7 @@ export async function joinSpot(details) {
   if (!supabase) {
     const result = joinLocalQueue(localSpots, localNextTokenNumber, {
       ...details,
-      id: globalThis.crypto?.randomUUID?.() ?? `spot-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: createLocalSpotId(),
     })
     localSpots = result.spots
     localNextTokenNumber = result.nextNumber
@@ -148,7 +187,7 @@ export async function joinSpot(details) {
     p_source: details.source ?? 'online',
   })
   if (error) throw error
-  if (data.cancel_key) window.localStorage.setItem(`${CANCEL_KEY_PREFIX}${data.spot.id}`, data.cancel_key)
+  if (data.cancel_key) storeCancelKey(data.spot.id, data.cancel_key)
   return { spot: normalizeSpot(data.spot), existing: Boolean(data.existing) }
 }
 
@@ -159,11 +198,11 @@ export async function cancelSpot(spotId) {
     return true
   }
 
-  const cancelKey = window.localStorage.getItem(`${CANCEL_KEY_PREFIX}${spotId}`)
+  const cancelKey = readCancelKey(spotId)
   if (!cancelKey) return false
   const { data, error } = await supabase.rpc('cancel_queue_spot', { p_spot_id: spotId, p_cancel_key: cancelKey })
   if (error) throw error
-  if (data === true) window.localStorage.removeItem(`${CANCEL_KEY_PREFIX}${spotId}`)
+  if (data === true) removeCancelKey(spotId)
   return data === true
 }
 

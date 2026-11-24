@@ -29,6 +29,7 @@ function App() {
   const [selectedServices, setSelectedServices] = useState([])
   const [selectedBarber, setSelectedBarber] = useState('any')
   const [error, setError] = useState('')
+  const [joinErrorDetail, setJoinErrorDetail] = useState('')
   const [result, setResult] = useState(null)
   const [walkInError, setWalkInError] = useState('')
   const t = { ...copy[language], ...Object.fromEntries(settings.services.map((service) => [service.id, language === 'hi' ? service.nameHi : service.nameEn])) }
@@ -37,9 +38,14 @@ function App() {
     window.history.pushState({}, '', next)
     setPath(next)
     setError('')
+    setJoinErrorDetail('')
     setResult(null)
     setActionError('')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch {
+      try { window.scrollTo(0, 0) } catch { /* Scrolling is optional for navigation. */ }
+    }
   }
 
   useEffect(() => {
@@ -97,6 +103,7 @@ function App() {
   const submit = async (event) => {
     event.preventDefault()
     setError('')
+    setJoinErrorDetail('')
     if (!onlineQueueReady) return setError('onlineClosedError')
     if (!name.trim()) return setError('nameError')
     if (!isValidPhone(phone)) return setError('phoneError')
@@ -108,7 +115,11 @@ function App() {
         : [...current, joined.spot])
       navigate(`/status/${joined.spot.id}`)
     } catch (joinError) {
-      console.error('Could not join the queue:', joinError)
+      const detail = typeof joinError?.message === 'string' && joinError.message.trim()
+        ? joinError.message
+        : String(joinError || 'Unknown error')
+      console.error('Could not join the queue:', detail, joinError)
+      setJoinErrorDetail(detail)
       setError('queueError')
     }
   }
@@ -180,7 +191,7 @@ function App() {
             <section className="rounded-[1.75rem] border border-white bg-white p-5 shadow-sm sm:p-7"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f8f2df] text-xs font-extrabold text-[#ad7f09]">03</span><h2 className="font-serif text-xl">{t.barber}</h2></div><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"><button type="button" onClick={() => setSelectedBarber('any')} className={`rounded-2xl border p-3 text-left transition ${selectedBarber === 'any' ? 'border-[#d4a017] bg-[#fbf7e9] ring-2 ring-[#d4a017]/15' : 'border-slate-100 bg-[#fcfbf8]'}`}><span className="grid h-11 w-11 place-items-center rounded-full bg-[#1f2937] text-[#d4a017]"><Sparkles size={17}/></span><span className="mt-2 block text-xs font-bold">{t.any}</span><span className="mt-0.5 block text-[10px] text-slate-500">{t.fastest}</span></button>{activeBarbers.map((barber) => <button type="button" key={barber.name} onClick={() => setSelectedBarber(barber.name)} className={`rounded-2xl border p-3 text-left transition ${selectedBarber === barber.name ? 'border-[#d4a017] bg-[#fbf7e9] ring-2 ring-[#d4a017]/15' : 'border-slate-100 bg-[#fcfbf8]'}`}><span className={`grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br ${barber.color} font-serif text-lg text-white`}>{barber.initials}</span><span className="mt-2 block text-xs font-bold">{barber.name}</span><span className="mt-0.5 block text-[10px] text-slate-500">{t[barber.state]}</span></button>)}</div></section>
           </div>
 
-          <aside className="sticky top-4 rounded-[1.75rem] bg-[#1f2937] p-5 text-white shadow-xl shadow-slate-900/15 sm:p-6"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[#e6bc4a]">✦ &nbsp; {t.summary}</p><h2 className="mt-2 font-serif text-2xl">{t.personalized}</h2><div className="my-5 space-y-3 border-y border-white/10 py-4"><div className="flex justify-between text-sm"><span className="text-slate-300">{t.total}</span><strong>{totals.minutes} {t.minutes}</strong></div><div className="flex justify-between text-sm"><span className="text-slate-300">{t.price}</span><strong>₹{totals.price}</strong></div><div className="flex justify-between text-sm"><span className="text-slate-300">{t.expected}</span><strong>~{expectedWait} {t.minutes}</strong></div></div><p className="min-h-5 text-xs font-semibold text-rose-200" aria-live="polite">{error === 'onlineClosedError' ? ownerText.closedMessage : error ? t[error] : ' '}</p><button type="submit" disabled={!onlineQueueReady || !activeServices.length} className="mt-2 flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-[#d4a017] px-4 py-3 text-sm font-bold text-[#1f2937] transition hover:bg-[#e2b32b]">{t.confirm}<ArrowRight size={17}/></button><p className="mt-3 text-center text-[10px] leading-4 text-slate-400">{t.spotHeld}</p></aside>
+          <aside className="sticky top-4 rounded-[1.75rem] bg-[#1f2937] p-5 text-white shadow-xl shadow-slate-900/15 sm:p-6"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[#e6bc4a]">✦ &nbsp; {t.summary}</p><h2 className="mt-2 font-serif text-2xl">{t.personalized}</h2><div className="my-5 space-y-3 border-y border-white/10 py-4"><div className="flex justify-between text-sm"><span className="text-slate-300">{t.total}</span><strong>{totals.minutes} {t.minutes}</strong></div><div className="flex justify-between text-sm"><span className="text-slate-300">{t.price}</span><strong>₹{totals.price}</strong></div><div className="flex justify-between text-sm"><span className="text-slate-300">{t.expected}</span><strong>~{expectedWait} {t.minutes}</strong></div></div><p className="min-h-5 text-xs font-semibold text-rose-200" aria-live="polite">{error === 'onlineClosedError' ? ownerText.closedMessage : error ? t[error] : ' '}</p><button type="submit" disabled={!onlineQueueReady || !activeServices.length} className="mt-2 flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-[#d4a017] px-4 py-3 text-sm font-bold text-[#1f2937] transition hover:bg-[#e2b32b]">{t.confirm}<ArrowRight size={17}/></button>{joinErrorDetail && <p role="alert" className="mt-2 break-words text-xs font-semibold text-rose-200">{joinErrorDetail}</p>}<p className="mt-3 text-center text-[10px] leading-4 text-slate-400">{t.spotHeld}</p></aside>
         </form>}
       </main> : <StatusScreen
         spot={statusSpot}

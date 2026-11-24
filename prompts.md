@@ -97,3 +97,7 @@ Build the Barber View (Screen 5, /barber/:name, phone, PIN 1234) and the Waiting
 ## 11.
 **Prompt:**
 Build the Owner Settings screen (Screen 7, /admin, PIN 1234) from docs/02-screens.md. Services list with name EN/HI, minutes, price and an on/off toggle; barbers on duty today toggle; queue switch Open / Closed for online joining; today's stats cards (customers served, average wait, no-shows). Turning off a service hides it from Join. Closing the queue disables the Join button on Home and Join with a clear message, but walk-ins at Reception still work. Store the settings in Supabase so all devices see them. All labels in EN/HI. Don't touch other screens. List the files you changed and how to test.
+
+## 12.
+**Prompt:**
+Fix responsiveness of the Reception Dashboard (/reception) only. It must work well on a 10-inch tablet in landscape (1024-1280px), a laptop, and a narrow window (about 400px). Barber cards: 3 columns in a row on tablet/laptop, stacked on narrow screens. Waiting list: on tablet/laptop keep the table, but with no horizontal scrolling at 1024px (reduce padding and font size if needed). On narrow screens (under 768px) show each waiting customer as a card instead of a table row, with token, name, services, preferred barber, waiting time, and the No-show and Cancel buttons (min 44px). Header and [+ Add walk-in] must not overflow, and the walk-in form must fit on small screens. Keep amber highlight, PIN gate, EN/HI labels and all behaviour unchanged. Don't touch other screens. List the files you changed and how to test.
