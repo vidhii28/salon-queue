@@ -145,6 +145,7 @@ export async function joinSpot(details) {
     p_phone: details.phone,
     p_service_ids: details.serviceIds,
     p_preferred_barber: details.barber,
+    p_source: details.source ?? 'online',
   })
   if (error) throw error
   if (data.cancel_key) window.localStorage.setItem(`${CANCEL_KEY_PREFIX}${data.spot.id}`, data.cancel_key)

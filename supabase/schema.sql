@@ -29,6 +29,82 @@ create index if not exists queue_spots_status_token_idx
 alter table public.queue_spots add column if not exists called_at timestamptz;
 alter table public.queue_spots add column if not exists started_at timestamptz;
 
+create table if not exists public.salon_settings (
+  id boolean primary key default true check (id),
+  queue_open boolean not null default true,
+  services jsonb not null default '[{"id":"haircut","name_en":"Haircut","minutes":30,"price":150,"enabled":true},{"id":"beard","name_en":"Beard trim","minutes":15,"price":80,"enabled":true},{"id":"spa","name_en":"Hair spa","minutes":45,"price":400,"enabled":true}]'::jsonb,
+  barbers jsonb not null default '{"Ravi":true,"Amit":true,"Imran":true}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+insert into public.salon_settings (id) values (true) on conflict (id) do nothing;
+alter table public.salon_settings enable row level security;
+revoke all on table public.salon_settings from public, anon, authenticated;
+grant select on table public.salon_settings to anon, authenticated;
+drop policy if exists "Salon settings are readable" on public.salon_settings;
+create policy "Salon settings are readable" on public.salon_settings
+  for select to anon, authenticated using (true);
+
+create or replace function public.admin_save_settings(
+  p_pin text, p_queue_open boolean, p_services jsonb, p_barbers jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_settings public.salon_settings%rowtype;
+begin
+  if p_pin is distinct from '1234' then raise exception 'Access denied.' using errcode = '42501'; end if;
+  if p_services is null or pg_catalog.jsonb_typeof(p_services) <> 'array' or pg_catalog.jsonb_array_length(p_services) <> 3 then
+    raise exception 'All three service settings are required.' using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from pg_catalog.jsonb_array_elements(p_services) as item(value)
+    where value->>'id' not in ('haircut','beard','spa')
+      or coalesce(value->>'name_en','') = '' or coalesce(value->>'name_hi','') = ''
+      or coalesce(value->>'minutes','') !~ '^[1-9][0-9]*$'
+      or coalesce(value->>'price','') !~ '^[0-9]+$'
+      or pg_catalog.jsonb_typeof(value->'enabled') <> 'boolean'
+  ) or (select pg_catalog.count(distinct value->>'id') from pg_catalog.jsonb_array_elements(p_services) as item(value)) <> 3 then
+    raise exception 'Service settings are invalid.' using errcode = '22023';
+  end if;
+  if pg_catalog.jsonb_typeof(p_barbers) <> 'object'
+    or pg_catalog.jsonb_typeof(p_barbers->'Ravi') <> 'boolean'
+    or pg_catalog.jsonb_typeof(p_barbers->'Amit') <> 'boolean'
+    or pg_catalog.jsonb_typeof(p_barbers->'Imran') <> 'boolean' then
+    raise exception 'Barber settings are invalid.' using errcode = '22023';
+  end if;
+  update public.salon_settings set queue_open = p_queue_open, services = p_services,
+    barbers = p_barbers, updated_at = pg_catalog.now()
+  where id = true returning * into v_settings;
+  return pg_catalog.jsonb_build_object('queue_open', v_settings.queue_open,
+    'services', v_settings.services, 'barbers', v_settings.barbers);
+end;
+$$;
+revoke all on function public.admin_save_settings(text, boolean, jsonb, jsonb) from public;
+grant execute on function public.admin_save_settings(text, boolean, jsonb, jsonb) to anon, authenticated;
+
+create or replace function public.admin_today_stats(p_pin text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_result jsonb;
+begin
+  if p_pin is distinct from '1234' then raise exception 'Access denied.' using errcode = '42501'; end if;
+  select pg_catalog.jsonb_build_object(
+    'customers_served', pg_catalog.count(*) filter (where status = 'done' and updated_at::date = current_date),
+    'average_wait_minutes', coalesce(pg_catalog.round((pg_catalog.avg(pg_catalog.date_part('epoch', (called_at - created_at)) / 60)
+      filter (where called_at is not null and status in ('called','in_chair','done') and called_at::date = current_date))::numeric, 0), 0),
+    'no_shows', pg_catalog.count(*) filter (where status = 'no_show' and updated_at::date = current_date)
+  ) into v_result from public.queue_spots;
+  return v_result;
+end;
+$$;
+revoke all on function public.admin_today_stats(text) from public;
+grant execute on function public.admin_today_stats(text) to anon, authenticated;
+
 create table if not exists public.barber_presence (
   barber_name text primary key check (barber_name in ('Ravi', 'Amit', 'Imran')),
   on_break boolean not null default false,
@@ -90,6 +166,7 @@ begin
   if p_pin is distinct from '1234' then raise exception 'Access denied.' using errcode = '42501'; end if;
   if p_barber not in ('Ravi', 'Amit', 'Imran') then raise exception 'Unknown barber.' using errcode = '22023'; end if;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_barber, 42));
+  if not coalesce((select barbers->>p_barber = 'true' from public.salon_settings where id = true), true) then return null; end if;
   if exists (select 1 from public.barber_presence where barber_name = p_barber and on_break) then return null; end if;
   if exists (select 1 from public.queue_spots where called_barber = p_barber and status in ('called','in_chair')) then return null; end if;
   select id into v_spot_id from public.queue_spots
@@ -225,11 +302,13 @@ create trigger queue_spots_cleanup_contact
   after update of status on public.queue_spots
   for each row execute function public.queue_spots_cleanup_contact();
 
+drop function if exists public.join_queue(text, text, text[], text);
 create or replace function public.join_queue(
   p_customer_name text,
   p_phone text,
   p_service_ids text[],
-  p_preferred_barber text default 'any'
+  p_preferred_barber text default 'any',
+  p_source text default 'online'
 )
 returns jsonb
 language plpgsql
@@ -240,6 +319,7 @@ declare
   v_spot public.queue_spots%rowtype;
   v_token bigint;
   v_cancel_key uuid;
+  v_settings public.salon_settings%rowtype;
 begin
   if p_customer_name is null or pg_catalog.length(pg_catalog.btrim(p_customer_name)) = 0
      or pg_catalog.length(pg_catalog.btrim(p_customer_name)) > 80 then
@@ -260,6 +340,22 @@ begin
   end if;
   if p_preferred_barber is null or p_preferred_barber not in ('any', 'Ravi', 'Amit', 'Imran') then
     raise exception 'Barber selection is invalid.' using errcode = '22023';
+  end if;
+  if p_source is null or p_source not in ('online', 'walk_in') then raise exception 'Join source is invalid.' using errcode = '22023'; end if;
+  select * into v_settings from public.salon_settings where id = true;
+  if p_source = 'online' and not v_settings.queue_open then
+    raise exception 'Online joining is closed.' using errcode = '55000';
+  end if;
+  if p_source = 'online' and exists (
+    select 1 from pg_catalog.unnest(p_service_ids) selected(service_id)
+    where not exists (
+      select 1 from pg_catalog.jsonb_array_elements(v_settings.services) as item(value)
+      where value->>'id' = selected.service_id and value->>'enabled' = 'true'
+    )
+  ) then raise exception 'A selected service is unavailable.' using errcode = '55000'; end if;
+  if p_source = 'online' and p_preferred_barber <> 'any'
+    and not coalesce((v_settings.barbers->>p_preferred_barber)::boolean, false) then
+    raise exception 'That barber is not on duty today.' using errcode = '55000';
   end if;
 
   -- Serialize joins from the same phone so concurrent windows cannot create duplicates.
@@ -301,8 +397,8 @@ begin
   ));
 end;
 $$;
-revoke all on function public.join_queue(text, text, text[], text) from public;
-grant execute on function public.join_queue(text, text, text[], text) to anon, authenticated;
+revoke all on function public.join_queue(text, text, text[], text, text) from public;
+grant execute on function public.join_queue(text, text, text[], text, text) to anon, authenticated;
 
 create or replace function public.cancel_queue_spot(p_spot_id uuid, p_cancel_key uuid)
 returns boolean
@@ -346,6 +442,14 @@ begin
       and tablename = 'barber_presence'
   ) then
     alter publication supabase_realtime add table public.barber_presence;
+  end if;
+  if not exists (
+    select 1 from pg_catalog.pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'salon_settings'
+  ) then
+    alter publication supabase_realtime add table public.salon_settings;
   end if;
 end;
 $$;

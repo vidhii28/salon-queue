@@ -5,6 +5,40 @@ export const SERVICES = [
 ]
 export const MAX_SERVICES_PER_SPOT = 3
 
+export function createDefaultSettings() {
+  return {
+    queueOpen: true,
+    services: SERVICES.map((service) => ({
+      ...service,
+      nameEn: { haircut: 'Haircut', beard: 'Beard trim', spa: 'Hair spa' }[service.id],
+      nameHi: { haircut: '\u0939\u0947\u092f\u0930\u0915\u091f', beard: '\u0926\u093e\u0922\u093c\u0940 \u091f\u094d\u0930\u093f\u092e', spa: '\u0939\u0947\u092f\u0930 \u0938\u094d\u092a\u093e' }[service.id],
+      enabled: true,
+    })),
+    barbers: Object.fromEntries(BARBERS.map(({ name }) => [name, true])),
+  }
+}
+
+export function normalizeSettings(raw) {
+  const defaults = createDefaultSettings()
+  if (!raw) return defaults
+  const inputServices = Array.isArray(raw.services) ? raw.services : []
+  return {
+    queueOpen: raw.queueOpen ?? raw.queue_open ?? defaults.queueOpen,
+    services: defaults.services.map((service) => {
+      const input = inputServices.find((item) => item.id === service.id) ?? {}
+      return {
+        ...service,
+        nameEn: input.nameEn ?? input.name_en ?? service.nameEn,
+        nameHi: input.nameHi ?? input.name_hi ?? service.nameHi,
+        minutes: Number(input.minutes ?? service.minutes),
+        price: Number(input.price ?? service.price),
+        enabled: input.enabled ?? true,
+      }
+    }),
+    barbers: Object.fromEntries(BARBERS.map(({ name }) => [name, raw.barbers?.[name] ?? true])),
+  }
+}
+
 export const BARBERS = [
   { name: 'Ravi', state: 'busy', initials: 'R', color: 'from-[#bd8156] to-[#57392e]' },
   { name: 'Amit', state: 'free', initials: 'A', color: 'from-[#727b6b] to-[#3d4d42]' },
@@ -47,9 +81,9 @@ export function isValidPhone(phone) {
   return /^\d{10}$/.test(phone)
 }
 
-export function calculateServiceTotals(serviceIds) {
+export function calculateServiceTotals(serviceIds, services = SERVICES) {
   return serviceIds.reduce((totals, serviceId) => {
-    const service = SERVICES.find((item) => item.id === serviceId)
+    const service = services.find((item) => item.id === serviceId)
     return service ? { minutes: totals.minutes + service.minutes, price: totals.price + service.price } : totals
   }, { minutes: 0, price: 0 })
 }
@@ -71,7 +105,7 @@ export function getEstimatedWaitMinutes(spotId, spots, barberStates) {
   const minutesAhead = waiting.slice(0, index).reduce((total, spot) => total + spot.serviceIds.reduce((sum, serviceId) => {
     return sum + (SERVICES.find((service) => service.id === serviceId)?.minutes ?? 0)
   }, 0), 0)
-  const workingBarbers = Math.max(1, BARBERS.filter((barber) => barberStates[barber.name] !== 'break').length)
+  const workingBarbers = Math.max(1, BARBERS.filter((barber) => !['break', 'off'].includes(barberStates[barber.name])).length)
   return Math.ceil(minutesAhead / workingBarbers)
 }
 
@@ -81,7 +115,7 @@ export function isPreferredBarberOnBreak(spot, barberStates) {
 
 export function callNextForBarber(barberName, spots, barberStates, now = Date.now()) {
   const barber = BARBERS.find((item) => item.name === barberName)
-  if (!barber || barberStates[barberName] === 'break' || spots.some((spot) => spot.calledBy === barberName && ['called', 'in_chair'].includes(spot.status))) return { spots, called: null }
+  if (!barber || ['break', 'off'].includes(barberStates[barberName]) || spots.some((spot) => spot.calledBy === barberName && ['called', 'in_chair'].includes(spot.status))) return { spots, called: null }
   const next = getWaitingSpots(spots).find((spot) => (spot.barber === 'any' || spot.barber === barberName) && (spot.barber === 'any' || barberStates[spot.barber] !== 'break'))
   if (!next) return { spots, called: null }
   return { spots: spots.map((spot) => spot.id === next.id ? { ...spot, status: 'called', calledBy: barberName, calledAt: now } : spot), called: next }

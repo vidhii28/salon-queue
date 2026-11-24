@@ -93,3 +93,7 @@ Build the Barber View (Screen 5, /barber/:name, phone, PIN 1234) and the Waiting
 
 **Result:** worked
 **Notes:** Tested /barber/ravi with PIN 1234: Start and Done work. Call next on Reception flashes the TV and shows "It's your turn" on the customer's phone. Start/Done and On break update Reception and TV within 5 seconds. EN/HI works on both screens.
+
+## 11.
+**Prompt:**
+Build the Owner Settings screen (Screen 7, /admin, PIN 1234) from docs/02-screens.md. Services list with name EN/HI, minutes, price and an on/off toggle; barbers on duty today toggle; queue switch Open / Closed for online joining; today's stats cards (customers served, average wait, no-shows). Turning off a service hides it from Join. Closing the queue disables the Join button on Home and Join with a clear message, but walk-ins at Reception still work. Store the settings in Supabase so all devices see them. All labels in EN/HI. Don't touch other screens. List the files you changed and how to test.
