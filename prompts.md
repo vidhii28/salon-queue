@@ -101,3 +101,20 @@ Build the Owner Settings screen (Screen 7, /admin, PIN 1234) from docs/02-screen
 ## 12.
 **Prompt:**
 Fix responsiveness of the Reception Dashboard (/reception) only. It must work well on a 10-inch tablet in landscape (1024-1280px), a laptop, and a narrow window (about 400px). Barber cards: 3 columns in a row on tablet/laptop, stacked on narrow screens. Waiting list: on tablet/laptop keep the table, but with no horizontal scrolling at 1024px (reduce padding and font size if needed). On narrow screens (under 768px) show each waiting customer as a card instead of a table row, with token, name, services, preferred barber, waiting time, and the No-show and Cancel buttons (min 44px). Header and [+ Add walk-in] must not overflow, and the walk-in form must fit on small screens. Keep amber highlight, PIN gate, EN/HI labels and all behaviour unchanged. Don't touch other screens. List the files you changed and how to test.
+
+## 13.
+**Promt:**
+
+Bug: After deleting all rows from queue_spots, new tokens continue from the old number instead of S-1. Look at how join_queue in supabase/schema.sql generates the token, and give me the exact SQL to reset that counter to 1. Explain the cause first. Don't change app behaviour.
+
+## 14.
+**Prompt:**
+Bug: On a phone and tablet, joining from the live Vercel link fails with "Could not join the queue. Check your connection and try again." On a laptop it works. Expected: it works on all devices. Show the real error message (from Supabase or the browser) on screen under the Join button, and also console.error it. Check that nothing in the Join flow depends on laptop-only things (localStorage reads that can throw, crypto.randomUUID, or a browser-specific API) and add safe fallbacks. Explain the cause first, then fix it. Don't change other behaviour.
+
+## 15.
+**Prompt:**
+Bug: On /barber/Ravi, after entering PIN 1234 the screen goes completely blank. Expected: the Barber View from docs/02-screens.md (current customer, [Start] then [Done], "Next for you", On break / Available toggle), and clear empty states when there is no customer. Find the runtime error that crashes the render (likely a missing field or undefined value after the Supabase queue_spots / salon_settings changes, e.g. accessing a property of an undefined spot or barber state). Add safe fallbacks for undefined values and an error boundary that shows a readable message instead of a blank page. Explain the cause first, then fix it. Don't touch other screens.
+
+## 16. 
+**Prompt:**
+Bug: After entering the PIN on /barber/Ravi the page goes blank with "Uncaught Error: cannot add postgres_changes callbacks for realtime:barber-presence-sync after subscribe()". Cause: the same Supabase realtime channel name is subscribed more than once (several components or React effects). Fix it everywhere: every supabase.channel(...) call must use a unique name per subscription and its useEffect must return a cleanup that calls supabase.removeChannel(channel). Better, subscribe once in the shared data layer and share the data via context or props. Search all files for supabase.channel. Don't change any other behaviour. Explain the cause first, then fix it. List the files you changed.

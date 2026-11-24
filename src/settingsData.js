@@ -2,6 +2,12 @@ import { normalizeSettings } from './queueRules.js'
 import { supabase } from './supabaseClient.js'
 
 const POLL_INTERVAL_MS = 3000
+let realtimeSubscriptionId = 0
+
+function nextRealtimeChannelName() {
+  realtimeSubscriptionId += 1
+  return `salon-settings-sync-${Date.now()}-${realtimeSubscriptionId}`
+}
 let localSettings = normalizeSettings(null)
 let localSpots = []
 
@@ -20,7 +26,7 @@ export function subscribeToSettings(onUpdate, onError = console.error) {
     catch (error) { if (active) onError(error) }
   }
   if (supabase) {
-    channel = supabase.channel('salon-settings-sync')
+    channel = supabase.channel(nextRealtimeChannelName())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'salon_settings' }, refresh)
       .subscribe()
   }

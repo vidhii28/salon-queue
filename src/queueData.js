@@ -4,6 +4,12 @@ import { isCloudQueueEnabled, supabase } from './supabaseClient.js'
 const POLL_INTERVAL_MS = 3000
 const CANCEL_KEY_PREFIX = 'salon-queue-cancel:'
 const memoryCancelKeys = new Map()
+let realtimeSubscriptionId = 0
+
+function nextRealtimeChannelName(prefix) {
+  realtimeSubscriptionId += 1
+  return `${prefix}-${Date.now()}-${realtimeSubscriptionId}`
+}
 let localSpots = createDemoQueue()
 let localNextTokenNumber = nextTokenNumber(localSpots)
 let localBarberStates = Object.fromEntries(BARBERS.map(({ name, state }) => [name, state]))
@@ -85,7 +91,7 @@ export function subscribeToBarberStates(onUpdate, onError = console.error) {
   const refresh = async () => { try { const states = await loadBarberStates(); if (active) onUpdate(states) } catch (error) { if (active) onError(error) } }
   let channel
   if (supabase) {
-    channel = supabase.channel('barber-presence-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'barber_presence' }, refresh).subscribe()
+    channel = supabase.channel(nextRealtimeChannelName('barber-presence-sync')).on('postgres_changes', { event: '*', schema: 'public', table: 'barber_presence' }, refresh).subscribe()
   } else localBarberSubscribers.add(onUpdate)
   refresh()
   const timer = window.setInterval(refresh, POLL_INTERVAL_MS)
@@ -96,7 +102,7 @@ export function subscribeToStaffQueue(pin, onUpdate, onError = console.error) {
   if (!supabase) return subscribeToQueue(onUpdate, onError)
   let active = true
   const refresh = async () => { try { const queue = await loadStaffQueue(pin); if (active) onUpdate(queue) } catch (error) { if (active) onError(error) } }
-  const channel = supabase.channel(`staff-queue-${Math.random().toString(16).slice(2)}`)
+  const channel = supabase.channel(nextRealtimeChannelName('staff-queue'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_spots' }, refresh).subscribe()
   refresh()
   const timer = window.setInterval(refresh, POLL_INTERVAL_MS)
@@ -224,7 +230,7 @@ export function subscribeToQueue(onUpdate, onError = console.error) {
     publish([...localSpots])
   } else {
     channel = supabase
-      .channel('queue-spots-sync')
+      .channel(nextRealtimeChannelName('queue-spots-sync'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_spots' }, refresh)
       .subscribe((status, error) => {
         if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) onError(error ?? new Error(`Queue realtime status: ${status}`))
