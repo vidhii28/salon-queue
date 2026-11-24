@@ -60,15 +60,44 @@ Built with OpenAI Codex.
 https://drive.google.com/file/d/1Zr4yhO328tk-yQMj3i2tPq16okAZF3CP/view?usp=drive_link
 
 ## Reflection
-The agent got my first build prompt wrong. I asked Codex to build the Home and Join
-screens, but the repo only had docs and no project yet, so it read the specs and
-planned without creating any files. I noticed when `npm install` failed with
-"package.json not found". I fixed it by rewriting the prompt to ask for the React +
-Vite + Tailwind setup in the same step, with the files at the root of the repo.
 
-A second problem was my own mistake: joining the queue failed with a Supabase
-"invalid path" error. The browser console showed `/rest/v1` twice in the request
-URL, which meant I had pasted the full API path into `VITE_SUPABASE_URL`. Using only
-the base project URL fixed it. The lesson for my docs and prompts: ask the agent for
-a visible error message and check it, and ask for plan-first on any step that needs
-setup outside the code, like creating the database.
+**The main thing the agent got wrong.** My first build prompt asked Codex to build
+the Home and Join screens, but the repo only had docs and no project yet. Codex read
+the specs and planned, but created no files. I noticed when `npm install` failed with
+"package.json not found". I fixed it by rewriting the prompt so that project setup
+(React + Vite + Tailwind at the root of the repo) and the screens were asked for in
+the same step.
+
+**Other things that went wrong, and how I found and fixed them**
+- **Antigravity could not open my project folder**, so I switched to Codex in VS Code.
+  Git was also not recognised in the terminal, so I used the GitHub app instead.
+- **Missing package:** after Codex added Supabase, the app crashed with "Failed to
+  resolve import @supabase/supabase-js". The package was in the code but not installed.
+  `npm install` fixed it.
+- **Wrong Supabase URL (my mistake):** joining failed with "Invalid path specified".
+  The browser console showed `/rest/v1` twice in the request URL, because I had pasted
+  the full API path into `VITE_SUPABASE_URL`. Using only the base project URL fixed it.
+- **Token numbers did not restart at S-1.** After I deleted test rows, tokens continued
+  from S-8. I read the `join_queue` function and found tokens come from a Postgres
+  sequence, which does not reset on delete. I reset it manually with SQL.
+- **Joining failed on phone and tablet but worked on my laptop.** The error was
+  "Could not find the function public.join_queue(... p_source)". The app expected a
+  newer database function than the one in Supabase, and my laptop was running an older
+  cached build. Re-running `supabase/schema.sql` and reloading the schema cache fixed it.
+- **Blank Barber screen after the PIN.** The console said "cannot add postgres_changes
+  callbacks ... after subscribe()": the same realtime channel was subscribed more than
+  once. Unique channel names and `removeChannel` cleanup fixed it.
+- **Reception was not responsive** on tablet and narrow screens, so I wrote a separate
+  prompt with exact breakpoints and layouts.
+
+**What I learned**
+- A prompt must say everything the step needs, including setup. A vague "build this"
+  gave me a plan instead of files.
+- The browser console and the Network tab usually name the real cause. The app's own
+  message ("check your connection") was too generic, so I now ask for real errors to be
+  shown.
+- The database and the code can drift apart. After changing the code that talks to
+  Supabase, I must re-run the schema and test on a second device, not only my laptop.
+- Testing on a phone and on the live link caught problems that localhost hid.
+- Editing the docs first (for example when I changed Gujarati to Hindi) and then
+  prompting kept the agent and the docs consistent.
