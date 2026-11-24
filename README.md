@@ -61,43 +61,41 @@ https://drive.google.com/file/d/1Zr4yhO328tk-yQMj3i2tPq16okAZF3CP/view?usp=drive
 
 ## Reflection
 
-**The main thing the agent got wrong.** My first build prompt asked Codex to build
-the Home and Join screens, but the repo only had docs and no project yet. Codex read
-the specs and planned, but created no files. I noticed when `npm install` failed with
-"package.json not found". I fixed it by rewriting the prompt so that project setup
-(React + Vite + Tailwind at the root of the repo) and the screens were asked for in
-the same step.
+**The main thing the agent got wrong.** My first prompt asked Codex to build the Home
+and Join screens, but my repo only had the docs and no project yet. Codex just read
+the docs and made a plan, it didn't create any files. I found out when `npm install`
+said "package.json not found". I fixed it by writing the prompt again so that it
+sets up the project (React + Vite + Tailwind) and builds the screens in the same step.
 
-**Other things that went wrong, and how I found and fixed them**
-- **Antigravity could not open my project folder**, so I switched to Codex in VS Code.
-  Git was also not recognised in the terminal, so I used the GitHub app instead.
+**Other problems I faced and how I fixed them**
+- **Antigravity wouldn't open my project folder**, so I switched to Codex in VS Code.
+  Git also wasn't working in my terminal, so I used the GitHub app.
 - **Missing package:** after Codex added Supabase, the app crashed with "Failed to
-  resolve import @supabase/supabase-js". The package was in the code but not installed.
-  `npm install` fixed it.
-- **Wrong Supabase URL (my mistake):** joining failed with "Invalid path specified".
-  The browser console showed `/rest/v1` twice in the request URL, because I had pasted
-  the full API path into `VITE_SUPABASE_URL`. Using only the base project URL fixed it.
-- **Token numbers did not restart at S-1.** After I deleted test rows, tokens continued
-  from S-8. I read the `join_queue` function and found tokens come from a Postgres
-  sequence, which does not reset on delete. I reset it manually with SQL.
-- **Joining failed on phone and tablet but worked on my laptop.** The error was
-  "Could not find the function public.join_queue(... p_source)". The app expected a
-  newer database function than the one in Supabase, and my laptop was running an older
-  cached build. Re-running `supabase/schema.sql` and reloading the schema cache fixed it.
-- **Blank Barber screen after the PIN.** The console said "cannot add postgres_changes
-  callbacks ... after subscribe()": the same realtime channel was subscribed more than
-  once. Unique channel names and `removeChannel` cleanup fixed it.
-- **Reception was not responsive** on tablet and narrow screens, so I wrote a separate
-  prompt with exact breakpoints and layouts.
+  resolve import @supabase/supabase-js". The code was using the package but it wasn't
+  installed. Running `npm install` fixed it.
+- **Wrong Supabase URL (my mistake):** joining the queue gave "Invalid path specified".
+  In the browser console I saw `/rest/v1` two times in the URL, because I had pasted
+  the full API path in `VITE_SUPABASE_URL`. I changed it to just the project URL.
+- **Token didn't start from S-1:** I deleted my test rows but the tokens kept going
+  from S-8. I looked at the `join_queue` function and saw the token comes from a
+  Postgres sequence, which doesn't reset when rows are deleted. I reset it with SQL.
+- **Join worked on my laptop but not on my phone or tablet.** The error was
+  "Could not find the function public.join_queue(... p_source)". My code was newer
+  than the function in Supabase, and my laptop was still showing an older version of
+  the site. I ran `supabase/schema.sql` again and it worked.
+- **Barber screen went blank after entering the PIN.** The console error said I was
+  subscribing to the same realtime channel more than once. I gave each subscription its
+  own name and removed it when the screen closes.
+- **Reception screen didn't fit on tablet and small screens**, so I wrote a separate
+  prompt with the exact screen sizes and layouts I wanted.
 
 **What I learned**
-- A prompt must say everything the step needs, including setup. A vague "build this"
-  gave me a plan instead of files.
-- The browser console and the Network tab usually name the real cause. The app's own
-  message ("check your connection") was too generic, so I now ask for real errors to be
-  shown.
-- The database and the code can drift apart. After changing the code that talks to
-  Supabase, I must re-run the schema and test on a second device, not only my laptop.
-- Testing on a phone and on the live link caught problems that localhost hid.
-- Editing the docs first (for example when I changed Gujarati to Hindi) and then
-  prompting kept the agent and the docs consistent.
+- If a step needs setup, the prompt should say so. A vague prompt gave me a plan
+  instead of working files.
+- The browser console usually shows the real reason for an error. The app's own message
+  ("check your connection") was too general.
+- The code and the database can go out of sync. After changing the code, I should run
+  the schema again and test on another device, not just my laptop.
+- Testing on my phone with the live link found bugs that localhost didn't show.
+- Updating the docs first and then prompting (like when I changed Gujarati to Hindi)
+  kept the code and docs matching.
