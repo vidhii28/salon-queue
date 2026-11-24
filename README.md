@@ -5,8 +5,9 @@
 
 **Staff screens** (test PIN: `1234`):
 - Reception: `/reception`
-- Barber: `/barber/ravi`
+- Barber: `/barber/ravi`, `/barber/Amit`, `/barber/Imran`
 - Waiting-area TV: `/display`
+- Owner settings: `/admin`
 
 ## About
 A queue app for a salon. On weekends customers wait 1-2 hours without knowing their
@@ -25,6 +26,8 @@ are available in English and Hindi.
 - Waiting-area TV with current customer per barber and the next 5 tokens
 - English / Hindi language toggle
 - One active spot per phone number; barber preferences are always respected
+- Owner settings: turn services on/off, set barbers on duty, open/close online joining, today's stats
+
 
 ## Queue rules
 - First come, first served
@@ -32,6 +35,7 @@ are available in English and Hindi.
 - A customer who chose Ravi is never given to another barber
 - Waiting time = total minutes of services ahead / barbers working
 - A no-show who returns is added again at the end with a new token
+- Online joining can be closed by the owner; walk-ins at Reception still work
 
 ## Tech stack
 React + Vite + Tailwind CSS, Supabase (Postgres with realtime), Vercel
@@ -53,7 +57,7 @@ React + Vite + Tailwind CSS, Supabase (Postgres with realtime), Vercel
 Built with OpenAI Codex.
 
 ## Demo video
-https://PASTE-YOUR-VIDEO-LINK-HERE
+https://drive.google.com/file/d/1Zr4yhO328tk-yQMj3i2tPq16okAZF3CP/view?usp=drive_link
 
 ## Reflection
 The agent got my first build prompt wrong. I asked Codex to build the Home and Join
